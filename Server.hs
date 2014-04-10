@@ -67,9 +67,8 @@ initState = fmap ServerState $ newMVar []
 registerClient :: WS.Connection -> Serv Client
 registerClient conn = do
   client  <- initClient conn
-  clients <- askClients
-  liftIO $ modifyMVar_ clients (return . (client :))
-  liftIO $ putStrLn $ "Client registered: " ++ show (clientId client)
+  modifyClients (client :)
+  consoleLog $ "Client registered: " ++ show (clientId client)
   return client
 
 initClient :: WS.Connection -> Serv Client
@@ -80,13 +79,17 @@ initClient conn = do
 
 unregisterClient :: Client -> Serv ()
 unregisterClient client = do
-  clients <- askClients
-  liftIO $ modifyMVar_ clients (return . deleteBy ((==) `on` clientId) client)
-  liftIO $ putStrLn $ "Client unregistered: " ++ show (clientId client)
+  modifyClients $ deleteBy ((==) `on` clientId) client
+  consoleLog $ "Client unregistered: " ++ show (clientId client)
+
+modifyClients :: ([Client] -> [Client]) -> Serv ()
+modifyClients f = askClients >>= liftIO . flip modifyMVar_ (return . f)
 
 askClients :: Serv (MVar [Client])
 askClients = Serv $ asks clients
 
+consoleLog :: String -> Serv ()
+consoleLog s = liftIO $ putStrLn s
 
 -- WS utils
 

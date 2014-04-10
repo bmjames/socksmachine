@@ -1,8 +1,15 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PackageImports #-}
+
 module Main where
 
 import Control.Concurrent
-import Control.Exception  (bracket)
-import Control.Monad      (forever, liftM2, unless)
+import Control.Monad            (forever, liftM2, unless)
+
+import Control.Monad.IO.Class      (MonadIO, liftIO)
+import Control.Monad.Trans.Reader  (ReaderT, asks, runReaderT)
+
+import "MonadCatchIO-transformers" Control.Monad.CatchIO (MonadCatchIO, bracket)
 
 import Data.Function      (on)
 import Data.List          (deleteBy)
@@ -18,25 +25,35 @@ import qualified Data.Text.IO       as T
 main :: IO ()
 main = do
   st <- initState
-  _  <- forkIO $ WS.runServer "0.0.0.0" 9160 $ serve st
-  forever $ T.getLine >>= liftM2 unless T.null (announce st)
+  _  <- forkIO $ WS.runServer "0.0.0.0" 9160 (runSt st serve)
+  forever $ T.getLine >>= liftM2 unless T.null (runSt st announce)
+    where
+      runSt st f = flip runReaderT st . runServ . f
 
-serve :: ServerState -> WS.PendingConnection -> IO ()
-serve st pending = do
-  conn <- WS.acceptRequest pending
+serve :: WS.PendingConnection -> Serv ()
+serve pending = do
+  conn <- liftIO $ WS.acceptRequest pending
   bracket
-    (registerClient st conn)
-    (unregisterClient st)
+    (registerClient conn)
+    unregisterClient
     (forever . talk)
 
-talk :: Client -> IO ()
-talk (Client _ conn chan) = readChan chan >>= WS.sendTextData conn
+talk :: Client -> Serv ()
+talk (Client _ conn chan) =
+  liftIO $ readChan chan >>= WS.sendTextData conn
 
-announce :: ServerState -> T.Text -> IO ()
-announce st msg =
-  readMVar (clients st) >>= mapM_ (flip writeChan msg . clientChan)
+announce :: T.Text -> Serv ()
+announce msg = do
+  clients <- askClients
+  liftIO $ readMVar clients >>= mapM_ (flip writeChan msg . clientChan)
 
--- Server state
+
+-- Server context monad
+
+newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
+                 deriving (Functor, Monad, MonadIO, MonadCatchIO)
+
+-- Read-only server state
 
 data Client = Client { clientId   :: UUID
                      , clientConn :: WS.Connection
@@ -48,23 +65,29 @@ data ServerState = ServerState { clients :: MVar [Client] }
 initState :: IO ServerState
 initState = fmap ServerState $ newMVar []
 
-registerClient :: ServerState -> WS.Connection -> IO Client
-registerClient st conn = do
-  client <- initClient conn
-  modifyMVar_ (clients st) (return . (client :))
-  putStrLn $ "Client registered: " ++ show (clientId client)
+registerClient :: WS.Connection -> Serv Client
+registerClient conn = do
+  client  <- initClient conn
+  clients <- askClients
+  liftIO $ modifyMVar_ clients (return . (client :))
+  liftIO $ putStrLn $ "Client registered: " ++ show (clientId client)
   return client
 
-initClient :: WS.Connection -> IO Client
+initClient :: WS.Connection -> Serv Client
 initClient conn = do
-  cid  <- uuid
-  chan <- newChan
+  cid  <- liftIO uuid
+  chan <- liftIO newChan
   return $ Client cid conn chan
 
-unregisterClient :: ServerState -> Client -> IO ()
-unregisterClient st client = do
-  modifyMVar_ (clients st) (return . deleteBy ((==) `on` clientId) client)
-  putStrLn $ "Client unregistered: " ++ show (clientId client)
+unregisterClient :: Client -> Serv ()
+unregisterClient client = do
+  clients <- askClients
+  liftIO $ modifyMVar_ clients (return . deleteBy ((==) `on` clientId) client)
+  liftIO $ putStrLn $ "Client unregistered: " ++ show (clientId client)
+
+askClients :: Serv (MVar [Client])
+askClients = Serv $ asks clients
+
 
 -- WS utils
 

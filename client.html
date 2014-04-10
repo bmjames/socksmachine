@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Websockets client</title>
+  <meta charset="utf-8">
+  
+  <script language="javascript" type="text/javascript">
+
+    var serverUri = "ws://localhost:9160/"
+
+    function onOpen(e) {
+      console.log("Connection opened.");
+    }
+
+    function onClose(e) {
+      console.log("Connection closed.");
+    }
+
+    function onMessage(e) {
+      console.log("Received message: " + e.data);
+    }
+
+    function onError(e) {
+      console.log("ERROR: " + e.data);
+    }
+
+    function runClient() {
+      sock = new WebSocket(serverUri);
+
+      sock.onopen    = onOpen;
+      sock.onclose   = onClose;
+      sock.onmessage = onMessage;
+      sock.onerror   = onError;
+    }
+
+    window.addEventListener("load", runClient, false);
+
+  </script>
+
+</head>
+
+<body>
+
+</body>
+
+</html>

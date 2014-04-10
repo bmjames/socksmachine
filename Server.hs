@@ -90,8 +90,3 @@ askClients = Serv $ asks clients
 
 consoleLog :: String -> Serv ()
 consoleLog s = liftIO $ putStrLn s
-
--- WS utils
-
-receiveTextData :: WS.Connection -> IO T.Text
-receiveTextData = WS.receiveData

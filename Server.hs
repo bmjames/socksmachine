@@ -4,18 +4,17 @@
 module Main where
 
 import Control.Concurrent
-import Control.Monad            (forever, liftM2, unless)
-
-import Control.Monad.IO.Class      (MonadIO, liftIO)
-import Control.Monad.Trans.Reader  (ReaderT, asks, runReaderT)
+import Control.Monad              (forever, liftM2, unless)
+import Control.Monad.IO.Class     (MonadIO, liftIO)
+import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
 
 import "MonadCatchIO-transformers" Control.Monad.CatchIO (MonadCatchIO, bracket)
 
-import Data.Function      (on)
-import Data.List          (deleteBy)
-import Data.UUID          (UUID)
+import Data.Function (on)
+import Data.List     (deleteBy)
+import Data.UUID     (UUID)
 
-import System.UUID.V4     (uuid)
+import System.UUID.V4 (uuid)
 
 import qualified Network.WebSockets as WS
 import qualified Data.Text          as T

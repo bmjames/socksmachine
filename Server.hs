@@ -3,8 +3,10 @@
 
 module Main where
 
-import Control.Concurrent
-import Control.Monad              (forever, liftM2, unless)
+import Control.Concurrent     (forkIO)
+import Control.Concurrent.STM
+
+import Control.Monad              (forever, liftM2, unless, void)
 import Control.Monad.IO.Class     (MonadIO, liftIO)
 import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
 
@@ -31,10 +33,13 @@ main = do
   where
     runSt st f = flip runReaderT st . runServ . f
 
+-- | Set the MOTD, and notify any currently connected clients
 announce :: T.Text -> Serv ()
 announce msg = do
+  setMotd msg
   clients <- askClients
-  liftIO $ readMVar clients >>= mapM_ (flip writeChan msg . clientChan)
+  liftIO . atomically $
+    readTMVar clients >>= mapM_ (flip writeTChan msg . clientChan)
 
 
 -- | Add client to server state, ensuring it is removed on error/disconnect.
@@ -45,10 +50,12 @@ serve pending = do
   bracket
     (registerClient conn)
     unregisterClient
-    (liftIO . forever . talk)
+    (liftM2 (>>) copyMotd (liftIO . forever . talk))
 
   where
-    talk (Client _ conn chan) = readChan chan >>= WS.sendTextData conn
+    talk (Client _ conn ch) = atomically (readTChan ch) >>= WS.sendTextData conn
+    copyMotd c = do  motd <- readMotd
+                     liftIO . atomically $ writeTChan (clientChan c) motd
 
 
 -- | Server context monad
@@ -56,15 +63,20 @@ newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
                  deriving (Functor, Monad, MonadIO, MonadCatchIO)
 
 -- | Read-only server state
-data ServerState = ServerState { clients :: MVar [Client] }
+data ServerState = ServerState { serverClients :: TMVar [Client]
+                               , serverMotd    :: TMVar (Maybe T.Text)
+                               }
 
 data Client = Client { clientId   :: UUID
                      , clientConn :: WS.Connection
-                     , clientChan :: Chan T.Text
+                     , clientChan :: TChan T.Text
                      }
 
 initState :: IO ServerState
-initState = fmap ServerState $ newMVar []
+initState = do
+  clients <- newTMVarIO []
+  motd    <- newTMVarIO Nothing
+  return $ ServerState clients motd
 
 registerClient :: WS.Connection -> Serv Client
 registerClient conn = do
@@ -76,7 +88,7 @@ registerClient conn = do
 initClient :: WS.Connection -> Serv Client
 initClient conn = liftIO $ do
   cid  <- uuid
-  chan <- newChan
+  chan <- newTChanIO
   return $ Client cid conn chan
 
 unregisterClient :: Client -> Serv ()
@@ -85,10 +97,28 @@ unregisterClient client = do
   consoleLog $ "Client unregistered: " ++ show (clientId client)
 
 modifyClients :: ([Client] -> [Client]) -> Serv ()
-modifyClients f = askClients >>= liftIO . flip modifyMVar_ (return . f)
+modifyClients f = do
+  clients <- askClients
+  liftIO . atomically $ modifyTMVar_ clients f
 
-askClients :: Serv (MVar [Client])
-askClients = Serv $ asks clients
+  where
+    modifyTMVar_ :: TMVar a -> (a -> a) -> STM ()
+    modifyTMVar_ var f = do a <- readTMVar var
+                            void $ swapTMVar var $ f a
+
+askClients :: Serv (TMVar [Client])
+askClients = Serv $ asks serverClients
+
+readMotd :: Serv T.Text
+readMotd = do
+  motd <- Serv $ asks serverMotd
+  liftIO . atomically $ readTMVar motd >>= maybe retry return
+
+setMotd :: T.Text -> Serv ()
+setMotd msg = do
+  motd <- Serv $ asks serverMotd
+  void . liftIO . atomically $ swapTMVar motd (Just msg)
+  consoleLog $ "Set MOTD: " ++ show msg
 
 consoleLog :: String -> Serv ()
 consoleLog s = liftIO $ putStrLn s

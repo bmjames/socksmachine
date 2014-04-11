@@ -45,11 +45,11 @@ serve pending = do
   bracket
     (registerClient conn)
     unregisterClient
-    (forever . talk)
+    (liftIO . forever . talk)
 
   where
-    talk (Client _ conn chan) =
-      liftIO $ readChan chan >>= WS.sendTextData conn
+    talk (Client _ conn chan) = readChan chan >>= WS.sendTextData conn
+
 
 -- | Server context monad
 newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
@@ -74,9 +74,9 @@ registerClient conn = do
   return client
 
 initClient :: WS.Connection -> Serv Client
-initClient conn = do
-  cid  <- liftIO uuid
-  chan <- liftIO newChan
+initClient conn = liftIO $ do
+  cid  <- uuid
+  chan <- newChan
   return $ Client cid conn chan
 
 unregisterClient :: Client -> Serv ()

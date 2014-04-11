@@ -54,9 +54,7 @@ serve pending = do
 
   where
     talk (Client _ conn ch) = atomically (readTChan ch) >>= WS.sendTextData conn
-    copyMotd c = do  motd <- readMotd
-                     liftIO . atomically $ writeTChan (clientChan c) motd
-
+    copyMotd c = readMotd >>= liftIO . atomically . writeTChan (clientChan c)
 
 -- | Server context monad
 newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
@@ -101,11 +99,6 @@ modifyClients f = do
   clients <- askClients
   liftIO . atomically $ modifyTMVar_ clients f
 
-  where
-    modifyTMVar_ :: TMVar a -> (a -> a) -> STM ()
-    modifyTMVar_ var f = do a <- readTMVar var
-                            void $ swapTMVar var $ f a
-
 askClients :: Serv (TMVar [Client])
 askClients = Serv $ asks serverClients
 
@@ -122,3 +115,7 @@ setMotd msg = do
 
 consoleLog :: String -> Serv ()
 consoleLog s = liftIO $ putStrLn s
+
+
+modifyTMVar_ :: TMVar a -> (a -> a) -> STM ()
+modifyTMVar_ var f = takeTMVar var >>= void . putTMVar var . (f $!)

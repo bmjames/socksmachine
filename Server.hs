@@ -21,14 +21,24 @@ import qualified Data.Text          as T
 import qualified Data.Text.IO       as T
 
 
+-- | Start a server, read lines from stdin and broadcast to all clients.
 main :: IO ()
 main = do
   st <- initState
   _  <- forkIO $ WS.runServer "0.0.0.0" 9160 (runSt st serve)
   forever $ T.getLine >>= liftM2 unless T.null (runSt st announce)
-    where
-      runSt st f = flip runReaderT st . runServ . f
 
+  where
+    runSt st f = flip runReaderT st . runServ . f
+
+announce :: T.Text -> Serv ()
+announce msg = do
+  clients <- askClients
+  liftIO $ readMVar clients >>= mapM_ (flip writeChan msg . clientChan)
+
+
+-- | Add client to server state, ensuring it is removed on error/disconnect.
+-- Once registered, send messages from the client's channel indefinitely.
 serve :: WS.PendingConnection -> Serv ()
 serve pending = do
   conn <- liftIO $ WS.acceptRequest pending
@@ -37,29 +47,21 @@ serve pending = do
     unregisterClient
     (forever . talk)
 
-talk :: Client -> Serv ()
-talk (Client _ conn chan) =
-  liftIO $ readChan chan >>= WS.sendTextData conn
+  where
+    talk (Client _ conn chan) =
+      liftIO $ readChan chan >>= WS.sendTextData conn
 
-announce :: T.Text -> Serv ()
-announce msg = do
-  clients <- askClients
-  liftIO $ readMVar clients >>= mapM_ (flip writeChan msg . clientChan)
-
-
--- Server context monad
-
+-- | Server context monad
 newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
                  deriving (Functor, Monad, MonadIO, MonadCatchIO)
 
--- Read-only server state
+-- | Read-only server state
+data ServerState = ServerState { clients :: MVar [Client] }
 
 data Client = Client { clientId   :: UUID
                      , clientConn :: WS.Connection
                      , clientChan :: Chan T.Text
                      }
-
-data ServerState = ServerState { clients :: MVar [Client] }
 
 initState :: IO ServerState
 initState = fmap ServerState $ newMVar []

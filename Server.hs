@@ -81,16 +81,13 @@ initState = do
 
 registerClient :: WS.Connection -> Serv Client
 registerClient conn = do
-  client  <- initClient conn
+  client  <- liftIO $ initClient conn
   modifyClients (client :)
   consoleLog $ "Client registered: " ++ show (clientId client)
   return client
 
-initClient :: WS.Connection -> Serv Client
-initClient conn = liftIO $ do
-  cid  <- uuid
-  chan <- newChan
-  return $ Client cid conn chan
+  where
+    initClient conn = liftM2 (flip Client conn) uuid newChan
 
 unregisterClient :: Client -> Serv ()
 unregisterClient client = do

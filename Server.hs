@@ -12,6 +12,7 @@ import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
 
 import "MonadCatchIO-transformers" Control.Monad.CatchIO (MonadCatchIO, bracket)
 
+import Data.Foldable (forM_)
 import Data.Function (on)
 import Data.List     (deleteBy)
 import Data.UUID     (UUID)
@@ -54,7 +55,8 @@ serve pending = do
 
   where
     talk (Client _ conn ch) = atomically (readTChan ch) >>= WS.sendTextData conn
-    copyMotd c = readMotd >>= liftIO . atomically . writeTChan (clientChan c)
+    copyMotd c = do msg <- readMotd
+                    liftIO . atomically $ forM_ msg $ writeTChan (clientChan c)
 
 -- | Server context monad
 newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
@@ -102,10 +104,10 @@ modifyClients f = do
 askClients :: Serv (TMVar [Client])
 askClients = Serv $ asks serverClients
 
-readMotd :: Serv T.Text
+readMotd :: Serv (Maybe T.Text)
 readMotd = do
   motd <- Serv $ asks serverMotd
-  liftIO . atomically $ readTMVar motd >>= maybe retry return
+  liftIO . atomically $ readTMVar motd
 
 setMotd :: T.Text -> Serv ()
 setMotd msg = do

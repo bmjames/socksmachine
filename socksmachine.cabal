@@ -18,7 +18,6 @@ executable socksmachine
   build-depends:       base >=4.6 && <4.7
                      , transformers >=0.3 && <0.4
                      , MonadCatchIO-transformers >=0.3 && <0.4
-                     , system-uuid >=2.1 && <2.2
                      , websockets >=0.8 && <0.9
                      , text >=0.11 && <0.12
   -- hs-source-dirs:

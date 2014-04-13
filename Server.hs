@@ -5,11 +5,9 @@ module Main where
 
 import Prelude hiding (mapM_)
 
-import Control.Concurrent      (forkIO)
-import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, readMVar, swapMVar)
-import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
+import Control.Concurrent
 
-import Control.Monad              (forever, liftM2, unless, void)
+import Control.Monad              (forever, liftM2, liftM3, unless, void)
 import Control.Monad.IO.Class     (MonadIO, liftIO)
 import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
 
@@ -18,9 +16,6 @@ import "MonadCatchIO-transformers" Control.Monad.CatchIO (MonadCatchIO, bracket)
 import Data.Foldable (mapM_)
 import Data.Function (on)
 import Data.List     (deleteBy)
-import Data.UUID     (UUID)
-
-import System.UUID.V4 (uuid)
 
 import qualified Network.WebSockets as WS
 import qualified Data.Text          as T
@@ -66,28 +61,34 @@ newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
 -- | Read-only server state
 data ServerState = ServerState { serverClients :: MVar [Client]
                                , serverMotd    :: MVar (Maybe T.Text)
+                               , serverNextId  :: MVar Integer
                                }
 
-data Client = Client { clientId   :: UUID
+data Client = Client { clientId   :: Integer
                      , clientConn :: WS.Connection
                      , clientChan :: Chan T.Text
                      }
 
 initState :: IO ServerState
-initState = do
-  clients <- newMVar []
-  motd    <- newMVar Nothing
-  return $ ServerState clients motd
+initState = liftM3 ServerState
+  (newMVar [])
+  (newMVar Nothing)
+  (newMVar 1)
 
 registerClient :: WS.Connection -> Serv Client
 registerClient conn = do
-  client  <- liftIO $ initClient conn
+  client  <- initClient conn
   modifyClients (client :)
   consoleLog $ "Client registered: " ++ show (clientId client)
   return client
 
   where
-    initClient conn = liftM2 (flip Client conn) uuid newChan
+    initClient conn = do
+      nextId <- Serv $ asks serverNextId
+      cId    <- liftIO $ takeMVar nextId
+      liftIO $ putMVar nextId (cId + 1)
+      chan   <- liftIO newChan
+      return $ Client cId conn chan
 
 unregisterClient :: Client -> Serv ()
 unregisterClient client = do

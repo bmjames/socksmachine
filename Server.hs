@@ -1,28 +1,26 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PackageImports #-}
 
 module Main where
 
 import Prelude hiding (mapM_)
 
-import Control.Applicative
+import Command
+import Monad
+
 import Control.Concurrent
 
-import Control.Monad              (forever, liftM2, liftM3, unless, void)
-import Control.Monad.IO.Class     (MonadIO, liftIO)
-import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
+import Control.Monad              (forever, liftM2, void)
+import Control.Monad.IO.Class     (liftIO)
+import Control.Monad.Trans.Reader (asks)
 
-import "MonadCatchIO-transformers" Control.Monad.CatchIO (MonadCatchIO, bracket)
+import "MonadCatchIO-transformers" Control.Monad.CatchIO (bracket)
 
 import Data.Foldable (mapM_)
 import Data.Function (on)
 import Data.List     (deleteBy, find)
 
-import Text.ParserCombinators.Parsec hiding ((<|>))
-
 import qualified Network.WebSockets as WS
 import qualified Data.Text          as T
-import qualified Data.Text.IO       as T
 
 
 -- | Start a server, read lines from stdin and broadcast to all clients.
@@ -42,6 +40,7 @@ serverConsoleMain = forever $ do
 
   where
     act (SetMotd msg) = announce msg
+    act ClearMotd     = clearMotd
     act (Msg cId msg) = sendToClient cId msg
 
 -- | Set the MOTD, and notify any currently connected clients
@@ -52,7 +51,7 @@ announce msg = do
   liftIO $ readMVar clients >>= mapM_ (flip writeChan msg . clientChan)
 
 -- | Send a message to a single client
-sendToClient :: ClientId -> T.Text -> Serv ()
+sendToClient :: Integer -> T.Text -> Serv ()
 sendToClient cId msg = do
   clients <- askClients >>= liftIO . readMVar
   let maybeClient = find ((== cId) . clientId) clients
@@ -71,33 +70,6 @@ serveConn pending = do
   where
     talk (Client _ conn ch) = readChan ch >>= WS.sendTextData conn
     copyMotd c = readMotd >>= liftIO . mapM_ (writeChan $ clientChan c)
-
--- | Server context monad
-newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
-                 deriving (Functor, Monad, MonadIO, MonadCatchIO)
-
--- | Read-only server state
-data ServerState = ServerState { serverClients :: MVar [Client]
-                               , serverMotd    :: MVar (Maybe T.Text)
-                               , serverNextId  :: MVar ClientId
-                               }
-
-type ClientId = Integer
-
-data Client = Client { clientId   :: ClientId
-                     , clientConn :: WS.Connection
-                     , clientChan :: Chan T.Text
-                     }
-
--- | Run through both 'Serv' and 'ReaderT'
-runServ' :: ServerState -> Serv a -> IO a
-runServ' st fa = flip runReaderT st $ runServ fa
-
-initState :: IO ServerState
-initState = liftM3 ServerState
-  (newMVar [])
-  (newMVar Nothing)
-  (newMVar 1)
 
 registerClient :: WS.Connection -> Serv Client
 registerClient conn = do
@@ -119,44 +91,19 @@ unregisterClient client = do
   modifyClients $ deleteBy ((==) `on` clientId) client
   consoleLog $ "Client unregistered: " ++ show (clientId client)
 
-modifyClients :: ([Client] -> [Client]) -> Serv ()
-modifyClients f = do
-  clients <- askClients
-  liftIO $ modifyMVar_ clients (return . f)
-
-askClients :: Serv (MVar [Client])
-askClients = Serv $ asks serverClients
-
 readMotd :: Serv (Maybe T.Text)
-readMotd = do
-  motd <- Serv $ asks serverMotd
-  liftIO $ readMVar motd
+readMotd = askMotd >>= liftIO . readMVar
 
 setMotd :: T.Text -> Serv ()
 setMotd msg = do
-  motd <- Serv $ asks serverMotd
+  motd <- askMotd
   void . liftIO $ swapMVar motd (Just msg)
   consoleLog $ "Set MOTD: " ++ show msg
 
+clearMotd :: Serv ()
+clearMotd = do
+  askMotd >>= liftIO . void . flip swapMVar Nothing
+  consoleLog "Cleared MOTD"
+
 consoleLog :: String -> Serv ()
 consoleLog s = liftIO $ putStrLn s
-
-
--- | Server admin commands
-data Command = SetMotd T.Text
-             | Msg ClientId T.Text
-
-parseCommand :: String -> Either ParseError Command
-parseCommand = parse (parseSetMotd <|> parseMsgClient) "console"
-
-parseSetMotd :: GenParser Char st Command
-parseSetMotd =
-  SetMotd . T.pack <$> (string "SETMOTD" *> spaces *> many1 anyChar)
-
-parseMsgClient :: GenParser Char st Command
-parseMsgClient =
-  Msg <$> (string "MSG" *> spaces *> parseClientId)
-      <*> fmap T.pack (spaces *> many1 anyChar)
-
-  where
-    parseClientId = read <$> many1 digit

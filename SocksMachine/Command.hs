@@ -1,4 +1,4 @@
-module Command
+module SocksMachine.Command
   (
     Command (..)
   , parseCommand

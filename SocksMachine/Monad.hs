@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PackageImports #-}
 
-module Monad where
+module SocksMachine.Monad where
 
 import Control.Concurrent
 import Control.Monad              (liftM3)

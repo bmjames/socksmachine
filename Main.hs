@@ -4,8 +4,8 @@ module Main where
 
 import Prelude hiding (mapM_)
 
-import Command
-import Monad
+import SocksMachine.Command
+import SocksMachine.Monad
 
 import Control.Concurrent
 

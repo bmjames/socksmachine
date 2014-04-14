@@ -12,7 +12,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable socksmachine
-  main-is:             Server.hs
+  main-is:             Main.hs
   -- other-modules:
   other-extensions:    GeneralizedNewtypeDeriving, PackageImports
   build-depends:       base >=4.6 && <4.7

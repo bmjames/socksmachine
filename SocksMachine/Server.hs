@@ -10,7 +10,7 @@ import SocksMachine.Monad
 import Control.Concurrent
 import Control.Monad              (forever, liftM2)
 import Control.Monad.IO.Class     (liftIO)
-import Control.Monad.Trans.Reader (ask, asks)
+import Control.Monad.Trans.Reader (asks)
 
 import "MonadCatchIO-transformers" Control.Monad.CatchIO (bracket)
 
@@ -23,9 +23,7 @@ import qualified Data.Text          as T
 
 
 serverMain :: String -> Int -> Serv ()
-serverMain addr port = do
-  st <- Serv ask
-  liftIO $ WS.runServer addr port $ runServ' st . serveConn
+serverMain addr port = liftBaseOpDiscard (WS.runServer addr port) serveConn
 
 -- | Read and parse input from the server console
 serverConsoleMain :: Serv ()

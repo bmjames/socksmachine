@@ -84,3 +84,7 @@ modifyClients :: ([Client] -> [Client]) -> Serv ()
 modifyClients f = do
   clients <- askClients
   liftIO $ modifyMVar_ clients (return . f)
+
+
+liftBaseOpDiscard :: MonadBaseControl b m => ((a -> b ()) -> b α) -> (a -> m ()) -> m α
+liftBaseOpDiscard f g = liftBaseWith $ \runInBase -> f $ void . runInBase . g

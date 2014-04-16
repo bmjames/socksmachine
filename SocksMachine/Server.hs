@@ -8,7 +8,7 @@ import SocksMachine.Command
 import SocksMachine.Monad
 
 import Control.Concurrent
-import Control.Monad              (forever, liftM2, unless)
+import Control.Monad              (forever, unless, void)
 import Control.Monad.IO.Class     (liftIO)
 import Control.Monad.Trans.Reader (asks)
 
@@ -57,14 +57,16 @@ sendToClient cId msg = do
 serveConn :: WS.PendingConnection -> Serv ()
 serveConn pending = do
   conn <- liftIO $ WS.acceptRequest pending
-  bracket
-    (registerClient conn)
-    unregisterClient
-    (liftM2 (>>) copyMotd (liftIO . forever . talk))
+  bracket (registerClient conn) unregisterClient $ \client -> do
+    -- send MOTD if it is set
+    copyMotd client
+    liftIO . void . forkIO . forever $ talk client
+    -- discard all data received from client
+    liftIO . forever . void $ WS.receiveDataMessage conn
 
   where
-    talk (Client _ conn ch) = readChan ch >>= WS.sendTextData conn
     copyMotd c = readMotd >>= liftIO . mapM_ (writeChan $ clientChan c)
+    talk (Client _ conn ch) = readChan ch >>= WS.sendTextData conn
 
 registerClient :: WS.Connection -> Serv Client
 registerClient conn = do
@@ -76,10 +78,11 @@ registerClient conn = do
   where
     initClient = do
       nextId <- Serv $ asks serverNextId
-      cId    <- liftIO $ takeMVar nextId
-      liftIO $ putMVar nextId (cId + 1)
-      chan   <- liftIO newChan
-      return $ Client cId conn chan
+      liftIO $ do
+        chan <- newChan
+        cId  <- takeMVar nextId
+        putMVar nextId (cId + 1)
+        return $ Client cId conn chan
 
 unregisterClient :: Client -> Serv ()
 unregisterClient client = do

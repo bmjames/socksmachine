@@ -8,7 +8,7 @@ import SocksMachine.Command
 import SocksMachine.Monad
 
 import Control.Concurrent
-import Control.Monad              (forever, liftM2)
+import Control.Monad              (forever, liftM2, unless)
 import Control.Monad.IO.Class     (liftIO)
 import Control.Monad.Trans.Reader (asks)
 
@@ -29,7 +29,7 @@ serverMain addr port = liftBaseOpDiscard (WS.runServer addr port) serveConn
 serverConsoleMain :: Serv ()
 serverConsoleMain = forever $ do
   line <- liftIO getLine
-  case parseCommand line of
+  unless (null line) $ case parseCommand line of
     Left  err -> consoleLog $ show err
     Right cmd -> act cmd
 

@@ -49,7 +49,7 @@ instance MonadBaseControl IO Serv where
 
 -- | Run through both 'Serv' and 'ReaderT'
 runServ' :: ServerState -> Serv a -> IO a
-runServ' st fa = flip runReaderT st $ runServ fa
+runServ' st = flip runReaderT st . runServ
 
 initState :: IO ServerState
 initState = liftM3 ServerState

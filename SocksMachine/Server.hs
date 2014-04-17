@@ -29,19 +29,18 @@ serverMain addr port = liftBaseOpDiscard (WS.runServer addr port) serveConn
 serverConsoleMain :: Serv ()
 serverConsoleMain = forever $ do
   line <- liftIO getLine
-  unless (null line) $ case parseCommand line of
-    Left  err -> consoleLog $ show err
-    Right cmd -> act cmd
+  unless (null line) $
+    either (consoleLog . show) runCommand $ parseCommand line
 
-  where
-    act (SetMotd msg) = announce msg
-    act ClearMotd     = clearMotd
-    act (Msg cId msg) = sendToClient cId msg
+runCommand :: Command -> Serv ()
+runCommand (SetMotd msg)    = setMotd msg >> announce msg
+runCommand ClearMotd        = clearMotd
+runCommand (Announce msg)   = announce msg
+runCommand (Notify cId msg) = sendToClient cId msg
 
 -- | Set the MOTD, and notify any currently connected clients
 announce :: T.Text -> Serv ()
 announce msg = do
-  setMotd msg
   clients <- askClients
   liftIO $ readMVar clients >>= mapM_ (flip writeChan msg . clientChan)
 

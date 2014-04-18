@@ -7,26 +7,29 @@
   
   <script language="javascript" type="text/javascript">
 
+    var sock;
+    var console;
     var serverUri = "ws://localhost:9160/";
 
     function onOpen(e) {
-      console.log("Connection opened.");
+      writeConsoleLn("<i>Connection opened.</i>");
     }
 
     function onClose(e) {
-      console.log("Connection closed.");
+      writeConsoleLn("<i>Connection closed.</i>");
     }
 
     function onMessage(e) {
-      console.log("Received message: " + e.data);
+      writeConsoleLn(e.data);
     }
 
     function onError(e) {
-      console.log("ERROR: " + e.data);
+      writeConsoleLn("<i>ERROR: " + e.data + "</i>");
     }
 
     function runClient() {
-      var sock = new WebSocket(serverUri);
+      console = document.getElementById("console");
+      sock = new WebSocket(serverUri);
 
       sock.onopen    = onOpen;
       sock.onclose   = onClose;
@@ -34,13 +37,27 @@
       sock.onerror   = onError;
     }
 
+    function writeConsoleLn(s) {
+      var line = document.createElement("p");
+      line.innerHTML = s;
+      console.appendChild(line);
+    }
+
     window.addEventListener("load", runClient, false);
 
   </script>
 
+  <style type="text/css">
+    #console {
+      font-family: monospace;
+    }
+  </style>
+
 </head>
 
 <body>
+
+  <div id="console"></div>
 
 </body>
 

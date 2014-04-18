@@ -8,6 +8,7 @@ import SocksMachine.Command
 import SocksMachine.Monad
 
 import Control.Concurrent
+import Control.Concurrent.Async   (concurrently)
 import Control.Monad              (forever, unless, void)
 import Control.Monad.IO.Class     (liftIO)
 import Control.Monad.Trans.Reader (asks)
@@ -59,9 +60,10 @@ serveConn pending = do
   bracket (registerClient conn) unregisterClient $ \client -> do
     -- send MOTD if it is set
     copyMotd client
-    liftIO . void . forkIO . forever $ talk client
-    -- discard all data received from client
-    liftIO . forever . void $ WS.receiveDataMessage conn
+    liftIO . void $ concurrently
+      (forever $ talk client)
+      -- discard (non-control) messages sent by client
+      (forever $ WS.receiveDataMessage conn)
 
   where
     copyMotd c = readMotd >>= liftIO . mapM_ (writeChan $ clientChan c)

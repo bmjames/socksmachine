@@ -15,13 +15,13 @@ import qualified Data.Text as T
 data Command = SetMotd T.Text
              | ClearMotd
              | Announce T.Text
-             | Notify Integer T.Text
+             | Msg Integer T.Text
 
 parseCommand :: String -> Either ParseError Command
 parseCommand = parse command "console"
 
 command :: GenParser Char st Command
-command = setMotd <|> clearMotd <|> announce <|> notify
+command = setMotd <|> clearMotd <|> announce <|> msg
 
 setMotd :: GenParser Char st Command
 setMotd =
@@ -33,10 +33,9 @@ clearMotd = ClearMotd <$ string "CLRMOTD"
 announce :: GenParser Char st Command
 announce = Announce . T.pack <$> (string "ANN" *> spaces *> many1 anyChar)
 
-notify :: GenParser Char st Command
-notify =
-  Notify <$> (string "MSG" *> spaces *> parseClientId)
-         <*> fmap T.pack (spaces *> many1 anyChar)
+msg :: GenParser Char st Command
+msg = Msg <$> (string "MSG" *> spaces *> parseClientId)
+          <*> fmap T.pack (spaces *> many1 anyChar)
 
   where
     parseClientId = read <$> many1 digit

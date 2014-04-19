@@ -16,12 +16,17 @@ data Command = SetMotd T.Text
              | ClearMotd
              | Announce T.Text
              | Msg Integer T.Text
+             | Shutdown
 
 parseCommand :: String -> Either ParseError Command
 parseCommand = parse command "console"
 
 command :: GenParser Char st Command
-command = setMotd <|> clearMotd <|> announce <|> msg
+command = try setMotd
+      <|> clearMotd
+      <|> announce
+      <|> msg
+      <|> shutdown
 
 setMotd :: GenParser Char st Command
 setMotd =
@@ -37,5 +42,7 @@ msg :: GenParser Char st Command
 msg = Msg <$> (string "MSG" *> spaces *> parseClientId)
           <*> fmap T.pack (spaces *> many1 anyChar)
 
-  where
-    parseClientId = read <$> many1 digit
+  where parseClientId = read <$> many1 digit
+
+shutdown :: GenParser Char st Command
+shutdown = Shutdown <$ string "SHUTDOWN"

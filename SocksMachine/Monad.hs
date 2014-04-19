@@ -83,6 +83,9 @@ unregisterClient client = do
 askClients :: Serv (MVar [Client])
 askClients = Serv $ asks serverClients
 
+readClients :: Serv [Client]
+readClients = askClients >>= liftIO . readMVar
+
 askMotd :: Serv (MVar (Maybe T.Text))
 askMotd = Serv $ asks serverMotd
 
@@ -108,12 +111,9 @@ modifyClients f = do
   clients <- askClients
   liftIO $ modifyMVar_ clients (return . f)
 
-sendTextToClient :: Client -> T.Text -> IO ()
-sendTextToClient client = writeChan (clientChan client)
-
 findClient :: Integer -> Serv (Maybe Client)
 findClient cId = do
-  clients <- askClients >>= liftIO . readMVar
+  clients <- readClients
   return $ find ((== cId) . clientId) clients
 
 

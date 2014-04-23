@@ -1,5 +1,3 @@
-{-# LANGUAGE PackageImports #-}
-
 module SocksMachine.Server where
 
 import Prelude hiding (mapM_)
@@ -9,10 +7,9 @@ import SocksMachine.Monad
 
 import Control.Concurrent
 import Control.Concurrent.Async   (concurrently)
+import Control.Exception.Lifted   (bracket)
 import Control.Monad              (forever, unless, void)
 import Control.Monad.IO.Class     (liftIO)
-
-import "MonadCatchIO-transformers" Control.Monad.CatchIO (bracket)
 
 import Data.Foldable (mapM_)
 import System.Exit   (exitSuccess)

@@ -1,6 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module SocksMachine.Monad where
@@ -16,8 +15,6 @@ import Control.Monad.Trans.Control
 import Data.Function (on)
 import Data.List     (deleteBy, find)
 
-import "MonadCatchIO-transformers" Control.Monad.CatchIO (MonadCatchIO)
-
 import qualified Data.Text          as T
 import qualified Network.WebSockets as WS
 
@@ -28,7 +25,6 @@ newtype Serv a = Serv { runServ :: ReaderT ServerState IO a }
                           , Applicative
                           , Monad
                           , MonadIO
-                          , MonadCatchIO
                           , MonadBase IO
                           )
 
